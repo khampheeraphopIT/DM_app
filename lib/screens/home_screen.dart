@@ -1,13 +1,15 @@
 import 'dart:io';
 import 'package:flutter/material.dart';
 import 'package:flutter_spinkit/flutter_spinkit.dart';
-import 'package:image_picker/image_picker.dart'; // เพิ่ม import
+import 'package:image_picker/image_picker.dart';
+import 'package:geolocator/geolocator.dart';
+import 'package:geocoding/geocoding.dart';
 import '../services/api_service.dart';
 import '../services/image_service.dart';
-import '../widgets/province_dropdown.dart';
 import '../widgets/image_picker_widget.dart';
 import '../widgets/result_display.dart';
 import '../models/prediction.dart';
+import '../widgets/location_widget.dart';
 
 class HomeScreen extends StatefulWidget {
   const HomeScreen({super.key});
@@ -19,44 +21,98 @@ class HomeScreen extends StatefulWidget {
 class _HomeScreenState extends State<HomeScreen> {
   final ApiService _apiService = ApiService();
   final ImageService _imageService = ImageService();
-  List<String> _provinces = [];
-  String? _selectedProvince;
+
   File? _imageFile;
-  XFile? _selectedImage; // เพิ่มแค่ตัวนี้
+  XFile? _selectedImage;
   PredictionResult? _result;
-  String? _provinceError;
   String? _fileError;
   String? _generalError;
   bool _isLoading = true;
 
+  // ตำแหน่ง
+  String? _currentProvince;
+  bool _isGettingLocation = false;
+  bool _locationPermissionDenied = false;
+
   @override
   void initState() {
     super.initState();
-    _loadProvinces();
+    _getCurrentLocation();
   }
 
-  Future<void> _loadProvinces() async {
+  // ดึงตำแหน่งจาก GPS
+  Future<void> _getCurrentLocation() async {
+    setState(() {
+      _isGettingLocation = true;
+      _isLoading = true;
+    });
+
     try {
-      final provinces = await _apiService.getProvinces();
+      bool serviceEnabled = await Geolocator.isLocationServiceEnabled();
+      if (!serviceEnabled) {
+        setState(() {
+          _generalError = 'กรุณาเปิด Location Services';
+          _isLoading = false;
+        });
+        return;
+      }
+      LocationPermission permission = await Geolocator.checkPermission();
+      if (permission == LocationPermission.denied) {
+        permission = await Geolocator.requestPermission();
+      }
+
+      if (permission == LocationPermission.denied ||
+          permission == LocationPermission.deniedForever) {
+        setState(() {
+          _locationPermissionDenied = true;
+          _generalError = 'กรุณาเปิดตำแหน่งในตั้งค่า';
+          _isGettingLocation = false;
+          _isLoading = false;
+        });
+        return;
+      }
+
+      // 2. ดึงตำแหน่ง
+      Position position = await Geolocator.getCurrentPosition(
+        desiredAccuracy: LocationAccuracy.high,
+      );
+
+      // 3. แปลงเป็นจังหวัด
+      List<Placemark> placemarks = await placemarkFromCoordinates(
+        position.latitude,
+        position.longitude,
+      );
+
+      String? province = placemarks.first.administrativeArea;
+      if (province != null) {
+        province = province
+            .replaceAll('จ.', '')
+            .replaceAll('จังหวัด', '')
+            .trim();
+      }
+
       setState(() {
-        _provinces = provinces;
+        _currentProvince = province ?? 'ไม่พบจังหวัด';
+        _isGettingLocation = false;
         _isLoading = false;
       });
     } catch (e) {
       setState(() {
-        _generalError = 'ไม่สามารถโหลดรายการจังหวัดได้';
+        _generalError = 'ไม่สามารถดึงตำแหน่งได้: $e';
+        _isGettingLocation = false;
         _isLoading = false;
       });
     }
   }
 
+  // เลือกภาพ
   Future<void> _pickImage(bool fromCamera) async {
     try {
       final pickedFile = await _imageService.pickImage(fromCamera: fromCamera);
       if (pickedFile != null) {
         setState(() {
-          _selectedImage = pickedFile; // เก็บ XFile
-          _imageFile = File(pickedFile.path); // แปลงเป็น File เพื่อแสดง
+          _selectedImage = pickedFile;
+          _imageFile = File(pickedFile.path);
           _fileError = null;
         });
       }
@@ -67,21 +123,20 @@ class _HomeScreenState extends State<HomeScreen> {
     }
   }
 
+  // ส่งข้อมูล
   Future<void> _submit() async {
     setState(() {
       _result = null;
-      _provinceError = null;
       _fileError = null;
       _generalError = null;
     });
 
-    if (_selectedProvince == null) {
-      setState(() => _provinceError = 'กรุณาเลือกจังหวัด');
+    if (_currentProvince == null || _currentProvince == 'ไม่พบจังหวัด') {
+      setState(() => _generalError = 'ไม่สามารถระบุจังหวัดได้');
       return;
     }
 
     if (_selectedImage == null) {
-      // ตรวจสอบจาก _selectedImage
       setState(() => _fileError = 'กรุณาอัปโหลดภาพ');
       return;
     }
@@ -90,8 +145,8 @@ class _HomeScreenState extends State<HomeScreen> {
 
     try {
       final result = await _apiService.predictDisease(
-        _selectedProvince!,
-        _selectedImage!, // ส่ง XFile โดยตรง
+        _currentProvince!,
+        _selectedImage!,
       );
       setState(() {
         _result = result;
@@ -99,7 +154,7 @@ class _HomeScreenState extends State<HomeScreen> {
       });
     } catch (e) {
       setState(() {
-        _generalError = 'เกิดข้อผิดพลาดในการเชื่อมต่อกับเซิร์ฟเวอร์';
+        _generalError = 'เกิดข้อผิดพลาด: $e';
         _isLoading = false;
       });
     }
@@ -125,9 +180,7 @@ class _HomeScreenState extends State<HomeScreen> {
                   child: Column(
                     children: [
                       const SizedBox(height: 20),
-
                       _buildStackedImages(),
-
                       const SizedBox(height: 30),
 
                       const Text(
@@ -143,10 +196,22 @@ class _HomeScreenState extends State<HomeScreen> {
 
                       const SizedBox(height: 40),
 
-                      _buildFormCard(),
+                      // แสดงตำแหน่งปัจจุบัน
+                      _buildLocationCard(),
+
+                      const SizedBox(height: 20),
+
+                      // อัปโหลดภาพ
+                      ImagePickerWidget(
+                        imageFile: _imageFile,
+                        onCameraPressed: () => _pickImage(true),
+                        onGalleryPressed: () => _pickImage(false),
+                        errorText: _fileError,
+                      ),
 
                       const SizedBox(height: 30),
 
+                      // ปุ่มส่ง
                       SizedBox(
                         width: double.infinity,
                         height: 56,
@@ -172,6 +237,7 @@ class _HomeScreenState extends State<HomeScreen> {
 
                       const SizedBox(height: 20),
 
+                      // ข้อผิดพลาด
                       if (_generalError != null)
                         Text(
                           _generalError!,
@@ -182,6 +248,7 @@ class _HomeScreenState extends State<HomeScreen> {
                           textAlign: TextAlign.center,
                         ),
 
+                      // ผลลัพธ์
                       if (_result != null) ResultDisplay(result: _result!),
                     ],
                   ),
@@ -191,6 +258,7 @@ class _HomeScreenState extends State<HomeScreen> {
     );
   }
 
+  // ภาพซ้อนกันด้านบน
   Widget _buildStackedImages() {
     return SizedBox(
       height: 220,
@@ -241,7 +309,6 @@ class _HomeScreenState extends State<HomeScreen> {
               ),
             ),
           ),
-
           Positioned(
             child: ClipRRect(
               borderRadius: BorderRadius.circular(16),
@@ -264,7 +331,6 @@ class _HomeScreenState extends State<HomeScreen> {
               ),
             ),
           ),
-
           Positioned(
             right: 20,
             top: 20,
@@ -335,7 +401,8 @@ class _HomeScreenState extends State<HomeScreen> {
     );
   }
 
-  Widget _buildFormCard() {
+  // การ์ดแสดงตำแหน่ง
+  Widget _buildLocationCard() {
     return Card(
       elevation: 6,
       shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
@@ -343,11 +410,13 @@ class _HomeScreenState extends State<HomeScreen> {
         padding: const EdgeInsets.all(20),
         child: Column(
           children: [
-            ProvinceDropdown(
-              provinces: _provinces,
-              selectedProvince: _selectedProvince,
-              onChanged: (value) => setState(() => _selectedProvince = value),
-              errorText: _provinceError,
+            // แสดงจังหวัดจาก GPS
+            LocationWidget(
+              province: _currentProvince,
+              isLoading: _isGettingLocation,
+              errorText: _locationPermissionDenied
+                  ? 'กรุณาเปิดตำแหน่งในตั้งค่า'
+                  : null,
             ),
             const SizedBox(height: 16),
             ImagePickerWidget(
