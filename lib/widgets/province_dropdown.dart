@@ -21,8 +21,10 @@ class ProvinceDropdown extends StatelessWidget {
       children: [
         DropdownButtonFormField<String>(
           decoration: InputDecoration(
-            labelText: 'Select Province',
-            border: OutlineInputBorder(borderRadius: BorderRadius.circular(12)),
+            labelText: 'เลือกจังหวัด',
+            border: OutlineInputBorder(borderRadius: BorderRadius.circular(16)),
+            filled: true,
+            fillColor: Colors.grey[50],
             errorText: errorText,
           ),
           value: selectedProvince,

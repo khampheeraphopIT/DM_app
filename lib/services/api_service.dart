@@ -1,7 +1,8 @@
 import 'dart:convert';
 import 'package:http/http.dart' as http;
 import 'package:http_parser/http_parser.dart';
-import '../constants//api_constants.dart';
+import 'package:image_picker/image_picker.dart';
+import '../constants/api_constants.dart';
 import '../models/prediction.dart';
 
 class ApiService {
@@ -18,8 +19,19 @@ class ApiService {
 
   Future<PredictionResult> predictDisease(
     String province,
-    String filePath,
+    XFile imageFile,
   ) async {
+    final extension = imageFile.path.split('.').last.toLowerCase();
+    final mimeMap = {
+      'jpg': 'jpeg',
+      'jpeg': 'jpeg',
+      'png': 'png',
+      'gif': 'gif',
+      'bmp': 'bmp',
+      'webp': 'webp',
+    };
+    final mimeType = mimeMap[extension] ?? 'jpeg';
+
     var request = http.MultipartRequest(
       'POST',
       Uri.parse('${ApiConstants.baseUrl}/${ApiConstants.predictUrl}'),
@@ -28,8 +40,8 @@ class ApiService {
     request.files.add(
       await http.MultipartFile.fromPath(
         'file',
-        filePath,
-        contentType: MediaType('image', 'jpeg'),
+        imageFile.path,
+        contentType: MediaType('image', mimeType),
       ),
     );
 
@@ -40,7 +52,7 @@ class ApiService {
     if (response.statusCode == 200 || response.statusCode == 400) {
       return PredictionResult.fromJson(data);
     } else {
-      throw Exception('Server Occured an Error');
+      throw Exception('Server Error: ${response.statusCode}');
     }
   }
 }
