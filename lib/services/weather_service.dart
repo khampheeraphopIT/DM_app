@@ -1,13 +1,13 @@
 import 'dart:convert';
 import 'package:http/http.dart' as http;
+import 'package:flutter/foundation.dart';
 
 class WeatherService {
-  // ใส่ API Key ของคุณตรงนี้
   static const String apiWeatherKey = '77b66e88815ead140b47301470f23127';
   static const String baseUrl =
       'https://api.openweathermap.org/data/2.5/weather';
 
-  /// ดึงชื่อจังหวัด (ภาษาไทย) + สภาพอากาศ จากพิกัด
+  /// ดึงชื่อจังหวัด + สภาพอากาศจากพิกัด
   static Future<Map<String, String>?> getWeatherAndProvince(
     double lat,
     double lon,
@@ -21,7 +21,6 @@ class WeatherService {
       if (response.statusCode == 200) {
         final data = json.decode(response.body);
 
-        // ชื่อจังหวัดภาษาไทย (เช่น "ลพบุรี", "กรุงเทพมหานคร")
         String province = data['name'] ?? 'ไม่พบจังหวัด';
         province = province
             .replaceAll('อำเภอ', '')
@@ -36,9 +35,13 @@ class WeatherService {
           'humidity': data['main']['humidity'].toString(),
           'rainfall': (data['rain']?['1h'] ?? 0.0).toString(),
         };
+      } else {
+        debugPrint(
+          'OpenWeather API error, status code: ${response.statusCode}',
+        );
       }
     } catch (e) {
-      print('OpenWeather Error: $e');
+      debugPrint('OpenWeather Error: $e');
     }
     return null;
   }

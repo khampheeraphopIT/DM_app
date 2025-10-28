@@ -118,6 +118,7 @@ class _HomeScreenState extends State<HomeScreen> {
           _selectedImage = pickedFile;
           _imageFile = File(pickedFile.path);
           _fileError = null;
+          _result = null;
         });
       }
     } catch (e) {
@@ -253,7 +254,40 @@ class _HomeScreenState extends State<HomeScreen> {
                         ),
 
                       // ผลลัพธ์
-                      if (_result != null) ResultDisplay(result: _result!),
+                      if (_result != null) ...[
+                        ResultDisplay(result: _result!),
+                        const SizedBox(height: 20),
+                        SizedBox(
+                          width: double.infinity,
+                          height: 50,
+                          child: ElevatedButton(
+                            onPressed: () {
+                              if (_selectedImage != null) {
+                                setState(() {
+                                  _result = null;
+                                  _isLoading = true;
+                                });
+                                _submit();
+                              }
+                            },
+                            style: ElevatedButton.styleFrom(
+                              backgroundColor: Colors.orange,
+                              shape: RoundedRectangleBorder(
+                                borderRadius: BorderRadius.circular(30),
+                              ),
+                              elevation: 6,
+                            ),
+                            child: const Text(
+                              'ลองอีกครั้ง',
+                              style: TextStyle(
+                                fontSize: 16,
+                                fontWeight: FontWeight.bold,
+                                color: Colors.white,
+                              ),
+                            ),
+                          ),
+                        ),
+                      ],
                     ],
                   ),
                 ),
