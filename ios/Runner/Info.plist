@@ -45,5 +45,15 @@
 	<true/>
 	<key>UIApplicationSupportsIndirectInputEvents</key>
 	<true/>
+
+    <!-- Permissions -->
+    <key>NSCameraUsageDescription</key>
+    <string>แอปนี้ต้องการใช้กล้องเพื่อถ่ายรูปใบอ้อยสำหรับตรวจสอบโรค</string>
+    <key>NSPhotoLibraryUsageDescription</key>
+    <string>แอปนี้ต้องการเข้าถึงรูปภาพเพื่ออัปโหลดใบอ้อย</string>
+    <key>NSPhotoLibraryAddUsageDescription</key>
+    <string>แอปนี้ต้องการบันทึกรูปภาพผลลัพธ์ลงอัลบั้ม</string>
+    <key>NSLocationWhenInUseUsageDescription</key>
+    <string>แอปนี้ต้องการตำแหน่งเพื่อระบุจังหวัดและสภาพอากาศของใบอ้อย</string>
 </dict>
 </plist>
