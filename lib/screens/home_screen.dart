@@ -3,13 +3,13 @@ import 'package:flutter/material.dart';
 import 'package:flutter_spinkit/flutter_spinkit.dart';
 import 'package:image_picker/image_picker.dart';
 import 'package:geolocator/geolocator.dart';
-import 'package:geocoding/geocoding.dart';
 import '../services/api_service.dart';
 import '../services/image_service.dart';
 import '../widgets/image_picker_widget.dart';
 import '../widgets/result_display.dart';
 import '../models/prediction.dart';
 import '../widgets/location_widget.dart';
+import '../services/weather_service.dart';
 
 class HomeScreen extends StatefulWidget {
   const HomeScreen({super.key});
@@ -33,6 +33,7 @@ class _HomeScreenState extends State<HomeScreen> {
   String? _currentProvince;
   bool _isGettingLocation = false;
   bool _locationPermissionDenied = false;
+  Map<String, String>? _preFetchedWeather;
 
   @override
   void initState() {
@@ -48,6 +49,7 @@ class _HomeScreenState extends State<HomeScreen> {
     });
 
     try {
+      // 1. ตรวจสอบ Location Service
       bool serviceEnabled = await Geolocator.isLocationServiceEnabled();
       if (!serviceEnabled) {
         setState(() {
@@ -56,11 +58,12 @@ class _HomeScreenState extends State<HomeScreen> {
         });
         return;
       }
+
+      // 2. ขออนุญาต
       LocationPermission permission = await Geolocator.checkPermission();
       if (permission == LocationPermission.denied) {
         permission = await Geolocator.requestPermission();
       }
-
       if (permission == LocationPermission.denied ||
           permission == LocationPermission.deniedForever) {
         setState(() {
@@ -72,27 +75,28 @@ class _HomeScreenState extends State<HomeScreen> {
         return;
       }
 
-      // 2. ดึงตำแหน่ง
+      // 3. ดึงพิกัด
       Position position = await Geolocator.getCurrentPosition(
         desiredAccuracy: LocationAccuracy.high,
       );
 
-      // 3. แปลงเป็นจังหวัด
-      List<Placemark> placemarks = await placemarkFromCoordinates(
+      // 4. ดึงข้อมูลจาก OpenWeather
+      final weatherData = await WeatherService.getWeatherAndProvince(
         position.latitude,
         position.longitude,
       );
 
-      String? province = placemarks.first.administrativeArea;
-      if (province != null) {
-        province = province
-            .replaceAll('จ.', '')
-            .replaceAll('จังหวัด', '')
-            .trim();
-      }
-
       setState(() {
-        _currentProvince = province ?? 'ไม่พบจังหวัด';
+        if (weatherData != null) {
+          _currentProvince = weatherData['province'];
+          _preFetchedWeather = {
+            'temp': weatherData['temperature']!,
+            'hum': weatherData['humidity']!,
+            'rain': weatherData['rainfall']!,
+          };
+        } else {
+          _currentProvince = 'ไม่พบจังหวัด';
+        }
         _isGettingLocation = false;
         _isLoading = false;
       });
@@ -417,13 +421,9 @@ class _HomeScreenState extends State<HomeScreen> {
               errorText: _locationPermissionDenied
                   ? 'กรุณาเปิดตำแหน่งในตั้งค่า'
                   : null,
-            ),
-            const SizedBox(height: 16),
-            ImagePickerWidget(
-              imageFile: _imageFile,
-              onCameraPressed: () => _pickImage(true),
-              onGalleryPressed: () => _pickImage(false),
-              errorText: _fileError,
+              temperature: _preFetchedWeather?['temp'],
+              humidity: _preFetchedWeather?['hum'],
+              rainfall: _preFetchedWeather?['rain'],
             ),
           ],
         ),
