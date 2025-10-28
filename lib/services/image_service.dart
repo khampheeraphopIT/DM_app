@@ -27,7 +27,9 @@ class ImageService {
 
       final XFile? xFile = await _picker.pickImage(
         source: fromCamera ? ImageSource.camera : ImageSource.gallery,
-        imageQuality: 80,
+        imageQuality: 100,
+        maxWidth: 1920,
+        maxHeight: 1080,
       );
 
       if (xFile == null) return null;

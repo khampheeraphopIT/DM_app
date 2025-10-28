@@ -118,6 +118,7 @@ class _HomeScreenState extends State<HomeScreen> {
           _selectedImage = pickedFile;
           _imageFile = File(pickedFile.path);
           _fileError = null;
+          _result = null;
         });
       }
     } catch (e) {
@@ -253,7 +254,40 @@ class _HomeScreenState extends State<HomeScreen> {
                         ),
 
                       // ผลลัพธ์
-                      if (_result != null) ResultDisplay(result: _result!),
+                      if (_result != null) ...[
+                        ResultDisplay(result: _result!),
+                        const SizedBox(height: 20),
+                        SizedBox(
+                          width: double.infinity,
+                          height: 50,
+                          child: ElevatedButton(
+                            onPressed: () {
+                              if (_selectedImage != null) {
+                                setState(() {
+                                  _result = null;
+                                  _isLoading = true;
+                                });
+                                _submit();
+                              }
+                            },
+                            style: ElevatedButton.styleFrom(
+                              backgroundColor: Colors.orange,
+                              shape: RoundedRectangleBorder(
+                                borderRadius: BorderRadius.circular(30),
+                              ),
+                              elevation: 6,
+                            ),
+                            child: const Text(
+                              'ลองอีกครั้ง',
+                              style: TextStyle(
+                                fontSize: 16,
+                                fontWeight: FontWeight.bold,
+                                color: Colors.white,
+                              ),
+                            ),
+                          ),
+                        ),
+                      ],
                     ],
                   ),
                 ),
@@ -317,7 +351,7 @@ class _HomeScreenState extends State<HomeScreen> {
             child: ClipRRect(
               borderRadius: BorderRadius.circular(16),
               child: Container(
-                width: 200,
+                width: 180,
                 height: 180,
                 decoration: BoxDecoration(
                   boxShadow: [
@@ -341,12 +375,13 @@ class _HomeScreenState extends State<HomeScreen> {
             child: Transform.rotate(
               angle: 0.12,
               child: Container(
-                width: 130,
+                width: 140,
                 height: 160,
                 decoration: BoxDecoration(
-                  color: Colors.white,
+                  color: const Color(0xFFE8F5E9),
                   borderRadius: BorderRadius.circular(12),
-                  boxShadow: [
+                  border: Border.all(color: Colors.green.shade400, width: 1.5),
+                  boxShadow: const [
                     BoxShadow(
                       color: Colors.black26,
                       blurRadius: 10,
@@ -357,40 +392,71 @@ class _HomeScreenState extends State<HomeScreen> {
                 child: Stack(
                   children: [
                     Padding(
-                      padding: const EdgeInsets.all(12),
+                      padding: const EdgeInsets.all(10),
                       child: Column(
                         crossAxisAlignment: CrossAxisAlignment.start,
                         children: [
                           Container(
-                            width: 60,
-                            height: 20,
-                            color: Colors.red,
+                            width: 80,
+                            height: 22,
+                            decoration: BoxDecoration(
+                              color: Colors.green.shade600,
+                              borderRadius: BorderRadius.circular(6),
+                            ),
                             alignment: Alignment.center,
                             child: const Text(
-                              'PDF',
+                              'สแกนอ้อย',
                               style: TextStyle(
                                 color: Colors.white,
                                 fontWeight: FontWeight.bold,
-                                fontSize: 10,
+                                fontSize: 12,
+                                letterSpacing: 0.5,
                               ),
                             ),
                           ),
                           const SizedBox(height: 8),
-                          Text(
-                            'W-8BEN',
+                          const Text(
+                            'ใบรายงานวิเคราะห์',
                             style: TextStyle(
-                              fontSize: 10,
+                              fontSize: 11,
                               fontWeight: FontWeight.bold,
+                              color: Colors.black87,
                             ),
                           ),
                           const SizedBox(height: 4),
                           Text(
-                            'Certificate of...',
-                            style: TextStyle(fontSize: 8, color: Colors.grey),
+                            'ผลการตรวจ',
+                            textAlign: TextAlign.center,
+                            style: TextStyle(
+                              fontSize: 10,
+                              color: Colors.grey[700],
+                            ),
                           ),
                           Text(
-                            'Foreign Status...',
-                            style: TextStyle(fontSize: 8, color: Colors.grey),
+                            'ความเสี่ยงของโรค',
+                            style: TextStyle(
+                              fontSize: 10,
+                              color: Colors.grey[700],
+                            ),
+                          ),
+                          const Spacer(),
+                          Row(
+                            children: const [
+                              Icon(
+                                Icons.qr_code_2,
+                                size: 20,
+                                color: Colors.green,
+                              ),
+                              SizedBox(width: 6),
+                              Text(
+                                'Scan SugarCane',
+                                style: TextStyle(
+                                  fontSize: 9,
+                                  color: Colors.black54,
+                                  fontStyle: FontStyle.italic,
+                                ),
+                              ),
+                            ],
                           ),
                         ],
                       ),
