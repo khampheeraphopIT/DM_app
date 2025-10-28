@@ -27,19 +27,19 @@ class PredictionResult {
 
   factory PredictionResult.fromJson(Map<String, dynamic> json) {
     return PredictionResult(
-      timestamp: json['timestamp'] as String?,
-      disease: json['disease'] as String?,
-      confidence: json['confidence'] as String?,
-      riskLevel: json['risk_level'] as String?,
-      province: json['province'] as String?,
-      temperature: json['temperature'] as String?,
-      humidity: json['humidity'] as String?,
-      rainfall: json['rainfall'] as String?,
+      timestamp: json['timestamp']?.toString(),
+      disease: json['disease']?.toString(),
+      confidence: json['confidence']?.toString(),
+      riskLevel: json['risk_level']?.toString(),
+      province: json['province']?.toString(),
+      temperature: json['temperature']?.toString(),
+      humidity: json['humidity']?.toString(),
+      rainfall: json['rainfall']?.toString(),
       probabilities: (json['probabilities'] as Map<String, dynamic>?)?.map(
-        (key, value) => MapEntry(key, value.toString()),
+        (key, value) => MapEntry(key.toString(), value.toString()),
       ),
-      gradcamPath: json['gradcam_path'] as String?,
-      error: json['error'] as String?,
+      gradcamPath: json['gradcam_path']?.toString(),
+      error: json['error']?.toString(),
     );
   }
 }
