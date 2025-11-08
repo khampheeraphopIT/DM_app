@@ -4,6 +4,36 @@ import 'dart:io';
 import 'package:image_picker/image_picker.dart';
 import 'package:permission_handler/permission_handler.dart';
 import 'package:path_provider/path_provider.dart';
+import 'package:image/image.dart' as img;
+
+Future<File> preprocessImage(XFile xFile) async {
+  // 1. อ่าน bytes
+  final bytes = await xFile.readAsBytes();
+  if (bytes.isEmpty) throw Exception('ภาพว่าง');
+
+  // 2. Decode ภาพ
+  final originalImage = img.decodeImage(bytes);
+  if (originalImage == null) throw Exception('ไม่สามารถ decode ภาพได้');
+
+  // 3. Resize เป็น 128x128 (เหมือนตอนเทรน)
+  final resizedImage = img.copyResize(
+    originalImage,
+    width: 128,
+    height: 128,
+    interpolation: img.Interpolation.cubic, // คุณภาพดี
+  );
+
+  // 4. แปลงเป็น JPEG (แนะนำ) เพื่อลดขนาดไฟล์
+  final jpegBytes = img.encodeJpg(resizedImage, quality: 90);
+
+  // 5. บันทึกไฟล์ชั่วคราว
+  final tempDir = await getTemporaryDirectory();
+  final fileName = 'preprocessed_${DateTime.now().millisecondsSinceEpoch}.jpg';
+  final file = File('${tempDir.path}/$fileName');
+  await file.writeAsBytes(jpegBytes);
+
+  return file;
+}
 
 class ImageService {
   final ImagePicker _picker = ImagePicker();
@@ -49,9 +79,7 @@ class ImageService {
 
       final XFile? xFile = await _picker.pickImage(
         source: fromCamera ? ImageSource.camera : ImageSource.gallery,
-        imageQuality: 85, // 100 อาจใหญ่เกิน
-        maxWidth: 1920,
-        maxHeight: 1080,
+        imageQuality: 90,
       );
 
       if (xFile == null) return null;
@@ -63,7 +91,7 @@ class ImageService {
       }
 
       // แปลงเป็น File แล้วคืน
-      return await _xFileToFile(xFile);
+      return await preprocessImage(xFile);
     } catch (e) {
       throw Exception('ไม่สามารถเลือกภาพได้: $e');
     }
