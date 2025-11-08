@@ -112,19 +112,17 @@ class _HomeScreenState extends State<HomeScreen> {
   // เลือกภาพ
   Future<void> _pickImage(bool fromCamera) async {
     try {
-      final pickedFile = await _imageService.pickImage(fromCamera: fromCamera);
-      if (pickedFile != null) {
+      final file = await _imageService.pickImage(fromCamera: fromCamera);
+      if (file != null) {
         setState(() {
-          _selectedImage = pickedFile;
-          _imageFile = File(pickedFile.path);
+          _imageFile = file;
+          _selectedImage = XFile(file.path);
           _fileError = null;
           _result = null;
         });
       }
     } catch (e) {
-      setState(() {
-        _fileError = e.toString();
-      });
+      setState(() => _fileError = e.toString());
     }
   }
 
@@ -149,9 +147,16 @@ class _HomeScreenState extends State<HomeScreen> {
     setState(() => _isLoading = true);
 
     try {
+      setState(() {
+        _isLoading = true;
+        _generalError = null;
+        _fileError = null;
+        _result = null;
+      });
+
       final result = await _apiService.predictDisease(
         _currentProvince!,
-        _selectedImage!,
+        _imageFile!,
       );
       setState(() {
         _result = result;

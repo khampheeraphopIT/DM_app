@@ -1,5 +1,9 @@
+// services/image_service.dart
+
+import 'dart:io';
 import 'package:image_picker/image_picker.dart';
 import 'package:permission_handler/permission_handler.dart';
+import 'package:path_provider/path_provider.dart';
 
 class ImageService {
   final ImagePicker _picker = ImagePicker();
@@ -13,7 +17,25 @@ class ImageService {
     'webp',
   ];
 
-  Future<XFile?> pickImage({required bool fromCamera}) async {
+  /// แปลง XFile → File (ใช้ได้ทุกที่)
+  Future<File> _xFileToFile(XFile xfile) async {
+    final tempDir = await getTemporaryDirectory();
+    final fileName = xfile.name;
+    final filePath = '${tempDir.path}/$fileName';
+
+    final file = File(filePath);
+    final bytes = await xfile.readAsBytes();
+
+    if (bytes.isEmpty) {
+      throw Exception('ภาพว่าง! ไม่สามารถอ่านได้');
+    }
+
+    await file.writeAsBytes(bytes);
+    return file;
+  }
+
+  /// คืน `File` พร้อมกัน (สะดวกสุด)
+  Future<File?> pickImage({required bool fromCamera}) async {
     try {
       // ขอ permission
       final permission = fromCamera ? Permission.camera : Permission.photos;
@@ -27,7 +49,7 @@ class ImageService {
 
       final XFile? xFile = await _picker.pickImage(
         source: fromCamera ? ImageSource.camera : ImageSource.gallery,
-        imageQuality: 100,
+        imageQuality: 85, // 100 อาจใหญ่เกิน
         maxWidth: 1920,
         maxHeight: 1080,
       );
@@ -40,7 +62,8 @@ class ImageService {
         throw Exception('รองรับเฉพาะไฟล์ภาพ: JPG, PNG, GIF, BMP, WEBP');
       }
 
-      return xFile;
+      // แปลงเป็น File แล้วคืน
+      return await _xFileToFile(xFile);
     } catch (e) {
       throw Exception('ไม่สามารถเลือกภาพได้: $e');
     }
