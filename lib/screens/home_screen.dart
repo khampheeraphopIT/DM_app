@@ -1,3 +1,4 @@
+// lib/screens/home_screen.dart
 import 'dart:io';
 import 'package:flutter/material.dart';
 import 'package:flutter_spinkit/flutter_spinkit.dart';
@@ -10,6 +11,7 @@ import '../widgets/result_display.dart';
 import '../models/prediction.dart';
 import '../widgets/location_widget.dart';
 import '../services/weather_service.dart';
+import 'dart:async';
 
 class HomeScreen extends StatefulWidget {
   const HomeScreen({super.key});
@@ -29,7 +31,6 @@ class _HomeScreenState extends State<HomeScreen> {
   String? _generalError;
   bool _isLoading = true;
 
-  // ตำแหน่ง
   String? _currentProvince;
   bool _isGettingLocation = false;
   bool _locationPermissionDenied = false;
@@ -41,19 +42,22 @@ class _HomeScreenState extends State<HomeScreen> {
     _getCurrentLocation();
   }
 
-  // ดึงตำแหน่งจาก GPS
+  // ดึงตำแหน่งจาก GPS + แสดง popup error ชัดเจน
   Future<void> _getCurrentLocation() async {
     setState(() {
       _isGettingLocation = true;
       _isLoading = true;
+      _generalError = null;
     });
 
     try {
       // 1. ตรวจสอบ Location Service
       bool serviceEnabled = await Geolocator.isLocationServiceEnabled();
       if (!serviceEnabled) {
+        final errorMsg = 'กรุณาเปิด "บริการตำแหน่ง" ในตั้งค่าโทรศัพท์';
+        _showErrorDialog(errorMsg);
         setState(() {
-          _generalError = 'กรุณาเปิด Location Services';
+          _generalError = errorMsg;
           _isLoading = false;
         });
         return;
@@ -64,21 +68,37 @@ class _HomeScreenState extends State<HomeScreen> {
       if (permission == LocationPermission.denied) {
         permission = await Geolocator.requestPermission();
       }
-      if (permission == LocationPermission.denied ||
-          permission == LocationPermission.deniedForever) {
+
+      if (permission == LocationPermission.denied) {
+        final errorMsg = 'กรุณาอนุญาตตำแหน่งในการเข้าใช้งานแอป';
+        _showErrorDialog(errorMsg);
         setState(() {
-          _locationPermissionDenied = true;
-          _generalError = 'กรุณาเปิดตำแหน่งในตั้งค่า';
-          _isGettingLocation = false;
+          _generalError = errorMsg;
           _isLoading = false;
         });
         return;
       }
 
-      // 3. ดึงพิกัด
-      Position position = await Geolocator.getCurrentPosition(
-        desiredAccuracy: LocationAccuracy.high,
-      );
+      if (permission == LocationPermission.deniedForever) {
+        final errorMsg =
+            'คุณปฏิเสธการเข้าถึงตำแหน่งแล้ว\nไปที่: ตั้งค่า > แอป > DM > สิทธิ์ > ตำแหน่ง > อนุญาต';
+        _showErrorDialog(errorMsg, showSettings: true);
+        setState(() {
+          _locationPermissionDenied = true;
+          _generalError = 'กรุณาเปิดตำแหน่งในตั้งค่า';
+          _isLoading = false;
+        });
+        return;
+      }
+
+      // 3. ดึงพิกัด (มี timeout)
+      Position position =
+          await Geolocator.getCurrentPosition(
+            desiredAccuracy: LocationAccuracy.high,
+          ).timeout(
+            Duration(seconds: 15),
+            onTimeout: () => throw TimeoutException('ดึงตำแหน่งช้าเกินไป'),
+          );
 
       // 4. ดึงข้อมูลจาก OpenWeather
       final weatherData = await WeatherService.getWeatherAndProvince(
@@ -95,18 +115,90 @@ class _HomeScreenState extends State<HomeScreen> {
             'rain': weatherData['rainfall']!,
           };
         } else {
+          final errorMsg =
+              'ไม่สามารถระบุจังหวัดได้\nกรุณาเปิด GPS และลองอีกครั้ง';
+          _showErrorDialog(errorMsg);
           _currentProvince = 'ไม่พบจังหวัด';
+          _generalError = errorMsg;
         }
         _isGettingLocation = false;
         _isLoading = false;
       });
-    } catch (e) {
+    } on TimeoutException catch (e) {
+      final errorMsg = 'ดึงตำแหน่งช้าเกินไป\nกรุณาเปิด GPS และลองอีกครั้ง';
+      _showErrorDialog(errorMsg);
       setState(() {
-        _generalError = 'ไม่สามารถดึงตำแหน่งได้: $e';
-        _isGettingLocation = false;
+        _generalError = errorMsg;
+        _isLoading = false;
+      });
+    } catch (e) {
+      final errorMsg = 'เกิดข้อผิดพลาด: $e\nกรุณาลองอีกครั้ง';
+      _showErrorDialog(errorMsg);
+      setState(() {
+        _generalError = errorMsg;
         _isLoading = false;
       });
     }
+  }
+
+  // แสดง popup error ชัดเจน
+  void _showErrorDialog(String message, {bool showSettings = false}) {
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      showDialog(
+        context: context,
+        barrierDismissible: false,
+        builder: (ctx) => AlertDialog(
+          backgroundColor: Colors.white,
+          shape: RoundedRectangleBorder(
+            borderRadius: BorderRadius.circular(16),
+          ),
+          title: Row(
+            children: [
+              Icon(Icons.error, color: Colors.red),
+              SizedBox(width: 8),
+              Flexible(
+                child: Text(
+                  "ไม่สามารถดึงตำแหน่งได้",
+                  style: TextStyle(fontWeight: FontWeight.bold, fontSize: 18),
+                  overflow: TextOverflow.ellipsis,
+                ),
+              ),
+            ],
+          ),
+          content: Container(
+            width: double.maxFinite,
+            constraints: BoxConstraints(maxHeight: 200), // จำกัดความสูง
+            child: SingleChildScrollView(
+              child: Text(
+                message,
+                style: TextStyle(fontSize: 15), // ลดขนาดตัวอักษร
+              ),
+            ),
+          ),
+          actions: [
+            if (showSettings)
+              TextButton.icon(
+                onPressed: () {
+                  Navigator.pop(ctx);
+                  Geolocator.openAppSettings();
+                },
+                icon: Icon(Icons.settings, color: Colors.blue),
+                label: Text(
+                  "ไปที่ตั้งค่า",
+                  style: TextStyle(color: Colors.blue),
+                ),
+              ),
+            TextButton(
+              onPressed: () {
+                Navigator.pop(ctx);
+                _getCurrentLocation();
+              },
+              child: Text("ลองอีกครั้ง", style: TextStyle(color: Colors.green)),
+            ),
+          ],
+        ),
+      );
+    });
   }
 
   // เลือกภาพ
@@ -147,17 +239,11 @@ class _HomeScreenState extends State<HomeScreen> {
     setState(() => _isLoading = true);
 
     try {
-      setState(() {
-        _isLoading = true;
-        _generalError = null;
-        _fileError = null;
-        _result = null;
-      });
-
       final result = await _apiService.predictDisease(
         _currentProvince!,
         _imageFile!,
       );
+      print('ส่ง province ไป backend: $_currentProvince');
       setState(() {
         _result = result;
         _isLoading = false;
@@ -192,7 +278,6 @@ class _HomeScreenState extends State<HomeScreen> {
                       const SizedBox(height: 20),
                       _buildStackedImages(),
                       const SizedBox(height: 30),
-
                       const Text(
                         'สแกนตรวจ\nโรคใบอ้อย',
                         textAlign: TextAlign.center,
@@ -203,25 +288,16 @@ class _HomeScreenState extends State<HomeScreen> {
                           height: 1.2,
                         ),
                       ),
-
                       const SizedBox(height: 40),
-
-                      // แสดงตำแหน่งปัจจุบัน
                       _buildLocationCard(),
-
                       const SizedBox(height: 20),
-
-                      // อัปโหลดภาพ
                       ImagePickerWidget(
                         imageFile: _imageFile,
                         onCameraPressed: () => _pickImage(true),
                         onGalleryPressed: () => _pickImage(false),
                         errorText: _fileError,
                       ),
-
                       const SizedBox(height: 30),
-
-                      // ปุ่มส่ง
                       SizedBox(
                         width: double.infinity,
                         height: 56,
@@ -244,11 +320,9 @@ class _HomeScreenState extends State<HomeScreen> {
                           ),
                         ),
                       ),
-
                       const SizedBox(height: 20),
-
-                      // ข้อผิดพลาด
-                      if (_generalError != null)
+                      // แสดง error + ปุ่มลองใหม่
+                      if (_generalError != null) ...[
                         Text(
                           _generalError!,
                           style: const TextStyle(
@@ -257,8 +331,16 @@ class _HomeScreenState extends State<HomeScreen> {
                           ),
                           textAlign: TextAlign.center,
                         ),
-
-                      // ผลลัพธ์
+                        const SizedBox(height: 10),
+                        ElevatedButton.icon(
+                          onPressed: _getCurrentLocation,
+                          icon: Icon(Icons.refresh),
+                          label: Text("ลองดึงตำแหน่งอีกครั้ง"),
+                          style: ElevatedButton.styleFrom(
+                            backgroundColor: Colors.orange,
+                          ),
+                        ),
+                      ],
                       if (_result != null) ...[
                         ResultDisplay(result: _result!),
                         const SizedBox(height: 20),
@@ -268,10 +350,7 @@ class _HomeScreenState extends State<HomeScreen> {
                           child: ElevatedButton(
                             onPressed: () {
                               if (_selectedImage != null) {
-                                setState(() {
-                                  _result = null;
-                                  _isLoading = true;
-                                });
+                                setState(() => _result = null);
                                 _submit();
                               }
                             },
@@ -301,7 +380,6 @@ class _HomeScreenState extends State<HomeScreen> {
     );
   }
 
-  // ภาพซ้อนกันด้านบน
   Widget _buildStackedImages() {
     return SizedBox(
       height: 220,
@@ -476,7 +554,6 @@ class _HomeScreenState extends State<HomeScreen> {
     );
   }
 
-  // การ์ดแสดงตำแหน่ง
   Widget _buildLocationCard() {
     return Card(
       elevation: 6,
@@ -485,7 +562,6 @@ class _HomeScreenState extends State<HomeScreen> {
         padding: const EdgeInsets.all(20),
         child: Column(
           children: [
-            // แสดงจังหวัดจาก GPS
             LocationWidget(
               province: _currentProvince,
               isLoading: _isGettingLocation,
