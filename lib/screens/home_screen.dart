@@ -25,6 +25,8 @@ class _HomeScreenState extends State<HomeScreen> {
   final ImageService _imageService = ImageService();
 
   File? _imageFile;
+  File? _originalImageFile;
+  File? _resizedImageFile;
   XFile? _selectedImage;
   PredictionResult? _result;
   String? _fileError;
@@ -204,11 +206,13 @@ class _HomeScreenState extends State<HomeScreen> {
   // เลือกภาพ
   Future<void> _pickImage(bool fromCamera) async {
     try {
-      final file = await _imageService.pickImage(fromCamera: fromCamera);
-      if (file != null) {
+      final files = await _imageService.pickImage(fromCamera: fromCamera);
+      if (files != null) {
         setState(() {
-          _imageFile = file;
-          _selectedImage = XFile(file.path);
+          _originalImageFile = files['original'];
+          _resizedImageFile = files['resized'];
+          _imageFile = _originalImageFile;
+          _selectedImage = XFile(_originalImageFile!.path);
           _fileError = null;
           _result = null;
         });
@@ -241,7 +245,7 @@ class _HomeScreenState extends State<HomeScreen> {
     try {
       final result = await _apiService.predictDisease(
         _currentProvince!,
-        _imageFile!,
+        _resizedImageFile!,
       );
       print('ส่ง province ไป backend: $_currentProvince');
       setState(() {
@@ -292,7 +296,7 @@ class _HomeScreenState extends State<HomeScreen> {
                       _buildLocationCard(),
                       const SizedBox(height: 20),
                       ImagePickerWidget(
-                        imageFile: _imageFile,
+                        imageFile: _originalImageFile,
                         onCameraPressed: () => _pickImage(true),
                         onGalleryPressed: () => _pickImage(false),
                         errorText: _fileError,

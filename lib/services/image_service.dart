@@ -6,33 +6,35 @@ import 'package:permission_handler/permission_handler.dart';
 import 'package:path_provider/path_provider.dart';
 import 'package:image/image.dart' as img;
 
-Future<File> preprocessImage(XFile xFile) async {
-  // 1. อ่าน bytes
+Future<Map<String, File>> preprocessImagePair(XFile xFile) async {
   final bytes = await xFile.readAsBytes();
   if (bytes.isEmpty) throw Exception('ภาพว่าง');
 
-  // 2. Decode ภาพ
   final originalImage = img.decodeImage(bytes);
   if (originalImage == null) throw Exception('ไม่สามารถ decode ภาพได้');
 
-  // 3. Resize เป็น 128x128 (เหมือนตอนเทรน)
+  // 1. ภาพต้นฉบับ → บันทึกเป็น File
+  final tempDir = await getTemporaryDirectory();
+  final originalFileName =
+      'original_${DateTime.now().millisecondsSinceEpoch}.jpg';
+  final originalFile = File('${tempDir.path}/$originalFileName');
+  await originalFile.writeAsBytes(bytes);
+
   final resizedImage = img.copyResize(
     originalImage,
     width: 128,
     height: 128,
-    interpolation: img.Interpolation.cubic, // คุณภาพดี
+    interpolation: img.Interpolation.cubic,
   );
 
-  // 4. แปลงเป็น JPEG (แนะนำ) เพื่อลดขนาดไฟล์
   final jpegBytes = img.encodeJpg(resizedImage, quality: 90);
 
-  // 5. บันทึกไฟล์ชั่วคราว
-  final tempDir = await getTemporaryDirectory();
-  final fileName = 'preprocessed_${DateTime.now().millisecondsSinceEpoch}.jpg';
-  final file = File('${tempDir.path}/$fileName');
-  await file.writeAsBytes(jpegBytes);
+  final resizedFileName =
+      'resized_${DateTime.now().millisecondsSinceEpoch}.jpg';
+  final resizedFile = File('${tempDir.path}/$resizedFileName');
+  await resizedFile.writeAsBytes(jpegBytes);
 
-  return file;
+  return {'original': originalFile, 'resized': resizedFile};
 }
 
 class ImageService {
@@ -65,9 +67,8 @@ class ImageService {
   }
 
   /// คืน `File` พร้อมกัน (สะดวกสุด)
-  Future<File?> pickImage({required bool fromCamera}) async {
+  Future<Map<String, File>?> pickImage({required bool fromCamera}) async {
     try {
-      // ขอ permission
       final permission = fromCamera ? Permission.camera : Permission.photos;
       final status = await permission.request();
 
@@ -79,19 +80,17 @@ class ImageService {
 
       final XFile? xFile = await _picker.pickImage(
         source: fromCamera ? ImageSource.camera : ImageSource.gallery,
-        imageQuality: 90,
+        imageQuality: 100,
       );
 
       if (xFile == null) return null;
 
-      // ตรวจสอบนามสกุล
       final extension = xFile.path.split('.').last.toLowerCase();
       if (!_allowedExtensions.contains(extension)) {
         throw Exception('รองรับเฉพาะไฟล์ภาพ: JPG, PNG, GIF, BMP, WEBP');
       }
 
-      // แปลงเป็น File แล้วคืน
-      return await preprocessImage(xFile);
+      return await preprocessImagePair(xFile);
     } catch (e) {
       throw Exception('ไม่สามารถเลือกภาพได้: $e');
     }
