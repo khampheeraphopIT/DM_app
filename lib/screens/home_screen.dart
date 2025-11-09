@@ -32,6 +32,9 @@ class _HomeScreenState extends State<HomeScreen> {
   String? _fileError;
   String? _generalError;
   bool _isLoading = true;
+  double _uploadProgress = 0.0;
+  Timer? _progressTimer;
+  bool _isSubmitting = false;
 
   String? _currentProvince;
   bool _isGettingLocation = false;
@@ -228,36 +231,61 @@ class _HomeScreenState extends State<HomeScreen> {
       _result = null;
       _fileError = null;
       _generalError = null;
+      _isSubmitting = true;
+      _uploadProgress = 0.0;
     });
 
     if (_currentProvince == null || _currentProvince == 'ไม่พบจังหวัด') {
       setState(() => _generalError = 'ไม่สามารถระบุจังหวัดได้');
+      _isSubmitting = false;
       return;
     }
-
     if (_selectedImage == null) {
       setState(() => _fileError = 'กรุณาอัปโหลดภาพ');
+      _isSubmitting = false;
       return;
     }
 
-    setState(() => _isLoading = true);
+    _startProgressSimulation();
 
     try {
       final result = await _apiService.predictDisease(
         _currentProvince!,
         _resizedImageFile!,
       );
-      print('ส่ง province ไป backend: $_currentProvince');
+
+      setState(() {
+        _uploadProgress = 1.0;
+      });
+      await Future.delayed(const Duration(milliseconds: 500));
       setState(() {
         _result = result;
-        _isLoading = false;
+        _isSubmitting = false;
+        _uploadProgress = 0.0;
       });
     } catch (e) {
       setState(() {
         _generalError = 'เกิดข้อผิดพลาด: $e';
-        _isLoading = false;
+        _isSubmitting = false;
+        _uploadProgress = 0.0;
       });
+    } finally {
+      _progressTimer?.cancel();
     }
+  }
+
+  void _startProgressSimulation() {
+    _progressTimer?.cancel();
+    _uploadProgress = 0.0;
+
+    _progressTimer = Timer.periodic(const Duration(milliseconds: 80), (timer) {
+      setState(() {
+        if (_uploadProgress < 0.9) {
+          _uploadProgress += 0.03;
+          if (_uploadProgress > 0.9) _uploadProgress = 0.9;
+        }
+      });
+    });
   }
 
   @override
@@ -300,6 +328,8 @@ class _HomeScreenState extends State<HomeScreen> {
                         onCameraPressed: () => _pickImage(true),
                         onGalleryPressed: () => _pickImage(false),
                         errorText: _fileError,
+                        isProcessing: _isSubmitting,
+                        progress: _uploadProgress,
                       ),
                       const SizedBox(height: 30),
                       SizedBox(

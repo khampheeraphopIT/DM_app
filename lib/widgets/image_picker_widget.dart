@@ -1,11 +1,14 @@
 import 'dart:io';
 import 'package:flutter/material.dart';
+import 'package:flutter_spinkit/flutter_spinkit.dart';
 
 class ImagePickerWidget extends StatelessWidget {
   final File? imageFile;
   final VoidCallback onCameraPressed;
   final VoidCallback onGalleryPressed;
   final String? errorText;
+  final bool isProcessing;
+  final double progress;
 
   const ImagePickerWidget({
     Key? key,
@@ -13,6 +16,8 @@ class ImagePickerWidget extends StatelessWidget {
     required this.onCameraPressed,
     required this.onGalleryPressed,
     this.errorText,
+    this.isProcessing = false,
+    this.progress = 0.0,
   }) : super(key: key);
 
   @override
@@ -74,19 +79,6 @@ class ImagePickerWidget extends StatelessWidget {
           ],
         ),
 
-        if (errorText != null)
-          Padding(
-            padding: const EdgeInsets.only(top: 10),
-            child: Text(
-              errorText!,
-              style: const TextStyle(
-                color: Colors.redAccent,
-                fontSize: 14,
-                fontWeight: FontWeight.w500,
-              ),
-            ),
-          ),
-
         if (imageFile != null)
           Padding(
             padding: const EdgeInsets.only(top: 20),
@@ -107,7 +99,48 @@ class ImagePickerWidget extends StatelessWidget {
                       ),
                     ],
                   ),
-                  child: Image.file(imageFile!, fit: BoxFit.cover),
+                  child: Stack(
+                    fit: StackFit.expand,
+                    children: [
+                      // รูปจริง
+                      Image.file(imageFile!, fit: BoxFit.cover),
+
+                      // Loading overlay
+                      if (isProcessing)
+                        Container(
+                          color: Colors.black.withOpacity(0.7),
+                          child: Center(
+                            child: Column(
+                              mainAxisSize: MainAxisSize.min,
+                              children: [
+                                // ใช้ flutter_spinkit ที่มีอยู่แล้ว
+                                const SpinKitFadingCircle(
+                                  color: Colors.green,
+                                  size: 50,
+                                ),
+                                const SizedBox(height: 16),
+                                Text(
+                                  '${(progress * 100).toInt()}%',
+                                  style: const TextStyle(
+                                    color: Colors.white,
+                                    fontSize: 24,
+                                    fontWeight: FontWeight.bold,
+                                  ),
+                                ),
+                                const SizedBox(height: 8),
+                                const Text(
+                                  'กำลังวิเคราะห์โรค...',
+                                  style: TextStyle(
+                                    color: Colors.white70,
+                                    fontSize: 16,
+                                  ),
+                                ),
+                              ],
+                            ),
+                          ),
+                        ),
+                    ],
+                  ),
                 ),
               ),
             ),
