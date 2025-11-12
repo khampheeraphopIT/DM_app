@@ -2,6 +2,7 @@
 import 'dart:io';
 import 'package:flutter/material.dart';
 import 'package:flutter_spinkit/flutter_spinkit.dart';
+import 'package:permission_handler/permission_handler.dart';
 import 'package:image_picker/image_picker.dart';
 import 'package:geolocator/geolocator.dart';
 import '../services/api_service.dart';
@@ -53,95 +54,108 @@ class _HomeScreenState extends State<HomeScreen> {
       _isGettingLocation = true;
       _isLoading = true;
       _generalError = null;
+      _locationPermissionDenied = false;
     });
 
     try {
       // 1. ตรวจสอบ Location Service
-      bool serviceEnabled = await Geolocator.isLocationServiceEnabled();
-      if (!serviceEnabled) {
-        final errorMsg = 'กรุณาเปิด "บริการตำแหน่ง" ในตั้งค่าโทรศัพท์';
-        _showErrorDialog(errorMsg);
+      if (!await Geolocator.isLocationServiceEnabled()) {
+        final msg = "กรุณาเปิด 'บริการตำแหน่ง' ในตั้งค่าโทรศัพท์";
+        _showErrorDialog(msg);
         setState(() {
-          _generalError = errorMsg;
+          _generalError = msg;
           _isLoading = false;
+          _isGettingLocation = false;
         });
         return;
       }
 
-      // 2. ขออนุญาต
-      LocationPermission permission = await Geolocator.checkPermission();
-      if (permission == LocationPermission.denied) {
-        permission = await Geolocator.requestPermission();
-      }
+      // 2. ขออนุญาตด้วย permission_handler (เวอร์ชัน 12+)
+      var status = await Permission.locationWhenInUse.request();
 
-      if (permission == LocationPermission.denied) {
-        final errorMsg = 'กรุณาอนุญาตตำแหน่งในการเข้าใช้งานแอป';
-        _showErrorDialog(errorMsg);
+      if (status.isDenied) {
+        final msg = "กรุณาอนุญาตตำแหน่งเพื่อใช้งานแอป";
+        _showErrorDialog(msg);
         setState(() {
-          _generalError = errorMsg;
+          _generalError = msg;
           _isLoading = false;
+          _isGettingLocation = false;
         });
         return;
       }
 
-      if (permission == LocationPermission.deniedForever) {
-        final errorMsg =
-            'คุณปฏิเสธการเข้าถึงตำแหน่งแล้ว\nไปที่: ตั้งค่า > แอป > DM > สิทธิ์ > ตำแหน่ง > อนุญาต';
-        _showErrorDialog(errorMsg, showSettings: true);
+      if (status.isPermanentlyDenied) {
+        final msg =
+            "คุณปฏิเสธการเข้าถึงตำแหน่งถาวร\nไปที่: ตั้งค่า > แอป > SugarCaneScan > สิทธิ์ > ตำแหน่ง > อนุญาต";
+        _showErrorDialog(msg, showSettings: true);
         setState(() {
           _locationPermissionDenied = true;
-          _generalError = 'กรุณาเปิดตำแหน่งในตั้งค่า';
+          _generalError = "กรุณาเปิดตำแหน่งในตั้งค่า";
           _isLoading = false;
+          _isGettingLocation = false;
         });
         return;
       }
 
-      // 3. ดึงพิกัด (มี timeout)
-      Position position =
-          await Geolocator.getCurrentPosition(
-            desiredAccuracy: LocationAccuracy.high,
-          ).timeout(
-            Duration(seconds: 15),
-            onTimeout: () => throw TimeoutException('ดึงตำแหน่งช้าเกินไป'),
-          );
+      if (!status.isGranted) {
+        final msg = "ไม่ได้รับอนุญาตตำแหน่ง";
+        _showErrorDialog(msg);
+        setState(() {
+          _generalError = msg;
+          _isLoading = false;
+          _isGettingLocation = false;
+        });
+        return;
+      }
 
-      // 4. ดึงข้อมูลจาก OpenWeather
+      // 3. ดึงตำแหน่ง (รองรับ timeLimit)
+      Position position;
+      try {
+        position = await Geolocator.getCurrentPosition(
+          desiredAccuracy: LocationAccuracy.high,
+          timeLimit: const Duration(seconds: 15),
+        );
+      } on TimeoutException {
+        final msg = "ดึงตำแหน่งช้าเกินไป\nกรุณาเปิด GPS และลองอีกครั้ง";
+        _showErrorDialog(msg);
+        setState(() {
+          _generalError = msg;
+          _isLoading = false;
+          _isGettingLocation = false;
+        });
+        return;
+      }
+
+      // 4. ดึงจังหวัด + อากาศ
       final weatherData = await WeatherService.getWeatherAndProvince(
         position.latitude,
         position.longitude,
       );
 
       setState(() {
-        if (weatherData != null) {
+        if (weatherData != null && weatherData['province'] != null) {
           _currentProvince = weatherData['province'];
           _preFetchedWeather = {
-            'temp': weatherData['temperature']!,
-            'hum': weatherData['humidity']!,
-            'rain': weatherData['rainfall']!,
+            'temp': weatherData['temperature'] ?? '-',
+            'hum': weatherData['humidity'] ?? '-',
+            'rain': weatherData['rainfall'] ?? '-',
           };
         } else {
-          final errorMsg =
-              'ไม่สามารถระบุจังหวัดได้\nกรุณาเปิด GPS และลองอีกครั้ง';
-          _showErrorDialog(errorMsg);
-          _currentProvince = 'ไม่พบจังหวัด';
-          _generalError = errorMsg;
+          _currentProvince = "ไม่พบจังหวัด";
+          _generalError =
+              "ไม่สามารถระบุจังหวัดได้\nกรุณาเปิด GPS และลองอีกครั้ง";
+          _showErrorDialog(_generalError!);
         }
         _isGettingLocation = false;
         _isLoading = false;
       });
-    } on TimeoutException catch (e) {
-      final errorMsg = 'ดึงตำแหน่งช้าเกินไป\nกรุณาเปิด GPS และลองอีกครั้ง';
-      _showErrorDialog(errorMsg);
-      setState(() {
-        _generalError = errorMsg;
-        _isLoading = false;
-      });
     } catch (e) {
-      final errorMsg = 'เกิดข้อผิดพลาด: $e\nกรุณาลองอีกครั้ง';
-      _showErrorDialog(errorMsg);
+      final msg = "เกิดข้อผิดพลาด: ${e.toString()}";
+      _showErrorDialog(msg);
       setState(() {
-        _generalError = errorMsg;
+        _generalError = msg;
         _isLoading = false;
+        _isGettingLocation = false;
       });
     }
   }
@@ -159,36 +173,33 @@ class _HomeScreenState extends State<HomeScreen> {
           ),
           title: Row(
             children: [
-              Icon(Icons.error, color: Colors.red),
-              SizedBox(width: 8),
+              const Icon(Icons.error, color: Colors.red),
+              const SizedBox(width: 8),
               Flexible(
                 child: Text(
-                  "ไม่สามารถดึงตำแหน่งได้",
-                  style: TextStyle(fontWeight: FontWeight.bold, fontSize: 18),
-                  overflow: TextOverflow.ellipsis,
+                  showSettings
+                      ? "ต้องเปิดตำแหน่งในตั้งค่า"
+                      : "ไม่สามารถดึงตำแหน่งได้",
+                  style: const TextStyle(
+                    fontWeight: FontWeight.bold,
+                    fontSize: 18,
+                  ),
                 ),
               ),
             ],
           ),
-          content: Container(
-            width: double.maxFinite,
-            constraints: BoxConstraints(maxHeight: 200), // จำกัดความสูง
-            child: SingleChildScrollView(
-              child: Text(
-                message,
-                style: TextStyle(fontSize: 15), // ลดขนาดตัวอักษร
-              ),
-            ),
+          content: SingleChildScrollView(
+            child: Text(message, style: const TextStyle(fontSize: 15)),
           ),
           actions: [
             if (showSettings)
               TextButton.icon(
-                onPressed: () {
+                onPressed: () async {
                   Navigator.pop(ctx);
-                  Geolocator.openAppSettings();
+                  await openAppSettings(); // จาก permission_handler
                 },
-                icon: Icon(Icons.settings, color: Colors.blue),
-                label: Text(
+                icon: const Icon(Icons.settings, color: Colors.blue),
+                label: const Text(
                   "ไปที่ตั้งค่า",
                   style: TextStyle(color: Colors.blue),
                 ),
@@ -198,7 +209,10 @@ class _HomeScreenState extends State<HomeScreen> {
                 Navigator.pop(ctx);
                 _getCurrentLocation();
               },
-              child: Text("ลองอีกครั้ง", style: TextStyle(color: Colors.green)),
+              child: const Text(
+                "ลองอีกครั้ง",
+                style: TextStyle(color: Colors.green),
+              ),
             ),
           ],
         ),
